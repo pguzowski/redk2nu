@@ -1,0 +1,32 @@
+#include "time_memory_tracker_microboone.fcl"
+#include "redk2nu.fcl"
+
+process_name: ReDk2Nu
+
+services: {
+  TimeTracker: @local::microboone_time_tracker
+  MemoryTracker: @local::microboone_memory_tracker
+}
+
+physics: {
+  producers: {
+    # use the same generator label, to not confuse downstream code
+    generator: @local::microboone_redk2nu_fhc
+  }
+  sim: [ generator ]
+  trigger_paths: [ sim ]
+  stream1: [ out1 ]
+  end_paths: [ stream1 ]
+}
+
+outputs:
+{
+  out1:
+  {
+    module_type: RootOutput
+    fileName:    "%ifb_dk2nu.root"
+    dataTier: "reconstructed"
+    compressionLevel: 1
+    saveMemoryObjectThreshold: 0
+  }
+}

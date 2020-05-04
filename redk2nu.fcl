@@ -1,0 +1,15 @@
+BEGIN_PROLOG
+
+microboone_redk2nu: {
+  module_type: ReDk2Nu
+  truth_label: "generator"
+  flux_location_template: "/dev/null" # will cause an exception, which we want, because we are overriding below
+}
+
+microboone_redk2nu_fhc: @local::microboone_redk2nu
+microboone_redk2nu_fhc.flux_location_template: "/cvmfs/uboone.osgstorage.org/stash/uboonebeam/numi_dk2nu_zero_threshold/FHC/g4numiv6_minervame_me000z200i_%d_0000.root"
+
+microboone_redk2nu_rhc: @local::microboone_redk2nu
+microboone_redk2nu_rhc.flux_location_template: "/cvmfs/uboone.osgstorage.org/stash/uboonebeam/numi_dk2nu_zero_threshold/RHC/g4numiv6_minervame_me000z-200i_%d_0000.root"
+
+END_PROLOG
