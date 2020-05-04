@@ -126,20 +126,30 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
       std::vector<bsim::Dk2Nu> found_dk2nus;
       found_dk2nus.clear();
       found_dk2nus.reserve(1);
+      const int nu_pdg = f.fntype;
       const double decay_vertex_x = f.fvx;
       const double decay_vertex_y = f.fvy;
       const double decay_vertex_z = f.fvz;
-      //std::cerr << " Finding potnum " << event << " "<<f.fvx<<","<<f.fvy<<","<<f.fvz<<" in "<<fMapOfFluxTreeEntries[run][event].size()<<" entries"<<std::endl;
       for(long entry : fMapOfFluxTreeEntries[run][event]) {
         fTrees[run]->GetEntry(entry);
-        //std::cerr << " Got entry " <<entry << " "<<dk2nu_entry->decay.vx<<","<<dk2nu_entry->decay.vy<<","<< dk2nu_entry->decay.vz<<std::endl;
-        if(decay_vertex_x == dk2nu_entry->decay.vx && 
+        if(nu_pdg == dk2nu_entry->decay.ntype && 
+            decay_vertex_x == dk2nu_entry->decay.vx && 
             decay_vertex_y == dk2nu_entry->decay.vy && 
             decay_vertex_z == dk2nu_entry->decay.vz) {
           found_dk2nus.push_back(*dk2nu_entry);
         }
       }
       if(found_dk2nus.size() != 1){
+        
+        for(long entry : fMapOfFluxTreeEntries[run][event]) {
+          fTrees[run]->GetEntry(entry);
+          if(nu_pdg == dk2nu_entry->decay.ntype && 
+              decay_vertex_x == dk2nu_entry->decay.vx && 
+              decay_vertex_y == dk2nu_entry->decay.vy && 
+              decay_vertex_z == dk2nu_entry->decay.vz) {
+            std::cerr <<"Error in: Run " << run << " Entry " << entry << std::endl;
+          }
+        }
         throw cet::exception("LogicError") << "Found "<<found_dk2nus.size()<<" allowed dk2nu entries" <<  std::endl;
       }
       dk2nucol->push_back(found_dk2nus.front());
