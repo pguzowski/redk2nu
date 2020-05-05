@@ -66,6 +66,8 @@ private:
 
   bsim::Dk2Nu* dk2nu_entry;
 
+  TFile *fCurrFile;
+
 
 };
 
@@ -86,10 +88,13 @@ redk2nu::ReDk2Nu::ReDk2Nu(fhicl::ParameterSet const& p)
   consumes< art::Assns<simb::MCTruth, simb::MCFlux> >(fGenLabel);
 
   dk2nu_entry = new bsim::Dk2Nu;
+
+  fCurrFile = 0;
 }
 
 redk2nu::ReDk2Nu::~ReDk2Nu() {
   delete dk2nu_entry;
+  delete fCurrFile;
 }
 
 void redk2nu::ReDk2Nu::produce(art::Event& e)
@@ -105,6 +110,7 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
     for(size_t iflux = 0; iflux < fluxHandle->size(); ++iflux) {
       auto const& f = fluxHandle->at(iflux);
       const int run = f.frun;
+
       auto clear_cache = [&]() {
         for(auto const& rev : fMapOfFluxTreeEntries) {
           std::string fname = Form("%d.cache",rev.first);
@@ -123,17 +129,28 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
           }
         }
         fMapOfFluxTreeEntries.clear();
+        if(fCurrFile) {
+          delete fCurrFile;
+          fCurrFile = 0;
+        }
       };
+      
+      auto load_tree = [&](const std::string& fn) -> TTree* {
+        if(fCurrFile) delete fCurrFile;
+        fCurrFile = new TFile(fn.c_str());
+        TTree *t = (TTree*)fCurrFile->Get("dk2nuTree");
+        if(!t) {
+          throw cet::exception("LogicError") << "Cannot find dk2nuTree in flux file "<<fn <<  std::endl;
+        }
+        t->SetBranchAddress("dk2nu", &dk2nu_entry);
+        return t;
+      };
+      
       if(fTrees.find(run) == fTrees.end()) {
         std::string fname = Form(fLocTemplate.c_str(), run);
         std::cout << "opening file " << fname << std::endl; 
-        TFile *file = new TFile(fname.c_str());
-        TTree *t = (TTree*)file->Get("dk2nuTree");
-        if(!t) {
-          throw cet::exception("LogicError") << "Cannot find dk2nuTree in flux file "<<fname <<  std::endl;
-        }
-        t->SetBranchAddress("dk2nu", &dk2nu_entry);
         clear_cache();
+        TTree *t = load_tree(fname);
         for(long i = 0; i < t->GetEntries(); ++i) {
           t->GetEntry(i);
           fMapOfFluxTreeEntries[run][dk2nu_entry->potnum].push_back(i);
@@ -144,20 +161,21 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
         clear_cache();
         std::string fname = Form("%d.cache",run);
         std::ifstream f(fname.c_str(),std::ifstream::binary);
-          if(f.good()) {
-            int event;
-            long entry;
-            while(true) {
-              f.read((char*)&event,sizeof(event));
-              if(!f.good()) break;
-              f.read((char*)&entry,sizeof(entry));
-              if(!f.good()) break;
-              fMapOfFluxTreeEntries[run][event].push_back(entry);
-            }
-          } else {
-            throw cet::exception("LogicError") << "Cannot find cache "<<fname <<  std::endl;
+        if(f.good()) {
+          int event;
+          long entry;
+          while(true) {
+            f.read((char*)&event,sizeof(event));
+            if(!f.good()) break;
+            f.read((char*)&entry,sizeof(entry));
+            if(!f.good()) break;
+            fMapOfFluxTreeEntries[run][event].push_back(entry);
           }
-          f.close();
+        } else {
+          throw cet::exception("LogicError") << "Cannot find cache "<<fname <<  std::endl;
+        }
+        f.close();
+        fTrees[run] = load_tree(Form(fLocTemplate.c_str(), run));
       }
       const int event = f.fevtno;
       if(fMapOfFluxTreeEntries[run].find(event) == fMapOfFluxTreeEntries[run].end()) {
