@@ -11,7 +11,7 @@ services: {
 physics: {
   producers: {
     # use the same generator label, to not confuse downstream code
-    generator: @local::microboone_redk2nu_fhc
+    generator: @local::microboone_redk2nu_rhc
   }
   sim: [ generator ]
   trigger_paths: [ sim ]
