@@ -23,6 +23,7 @@
 #include "art/Persistency/Common/PtrMaker.h"
 
 #include <memory>
+#include <cstdlib>
 
 #include <map>
 #include <vector>
@@ -67,14 +68,17 @@ private:
   bsim::Dk2Nu* dk2nu_entry;
 
   TFile *fCurrFile;
-
+  
+  std::string fTmploc;
 
 };
 
 
 redk2nu::ReDk2Nu::ReDk2Nu(fhicl::ParameterSet const& p)
   : EDProducer{p}, fGenLabel(p.get<std::string>("truth_label")),
-  fLocTemplate(p.get<std::string>("flux_location_template"))
+  fLocTemplate(p.get<std::string>("flux_location_template")),
+  dk2nu_entry(new bsim::Dk2Nu),
+  fCurrFile(0), fTmploc("")
   // ,
   // More initializers here.
 {
@@ -87,9 +91,10 @@ redk2nu::ReDk2Nu::ReDk2Nu(fhicl::ParameterSet const& p)
   consumes< std::vector<simb::MCFlux>  >(fGenLabel);
   consumes< art::Assns<simb::MCTruth, simb::MCFlux> >(fGenLabel);
 
-  dk2nu_entry = new bsim::Dk2Nu;
-
-  fCurrFile = 0;
+  char* tmpdir = std::getenv("TMPDIR");
+  if(tmpdir) {
+    fTmploc = Form("%s/",tmpdir);
+  }
 }
 
 redk2nu::ReDk2Nu::~ReDk2Nu() {
@@ -113,7 +118,7 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
 
       auto clear_cache = [&]() {
         for(auto const& rev : fMapOfFluxTreeEntries) {
-          std::string fname = Form("%d.cache",rev.first);
+          std::string fname = Form("%s%d.cache",fTmploc.c_str(),rev.first);
           if(!std::ifstream(fname.c_str()).good()) {
             std::ofstream f(fname, std::ofstream::binary);
             for(auto const& p : rev.second) {
@@ -159,7 +164,7 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
       }
       if(fMapOfFluxTreeEntries.find(run) == fMapOfFluxTreeEntries.end()) {
         clear_cache();
-        std::string fname = Form("%d.cache",run);
+        std::string fname = Form("%s%d.cache",fTmploc.c_str(),run);
         std::ifstream f(fname.c_str(),std::ifstream::binary);
         if(f.good()) {
           int event;
