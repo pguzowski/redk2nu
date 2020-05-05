@@ -27,6 +27,7 @@
 #include <map>
 #include <vector>
 #include <string>
+#include <fstream>
 
 #include "TFile.h"
 #include "TTree.h"
@@ -104,6 +105,25 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
     for(size_t iflux = 0; iflux < fluxHandle->size(); ++iflux) {
       auto const& f = fluxHandle->at(iflux);
       const int run = f.frun;
+      auto clear_cache = [&]() {
+        for(auto const& rev : fMapOfFluxTreeEntries) {
+          std::string fname = Form("%d.cache",rev.first);
+          if(!std::ifstream(fname.c_str()).good()) {
+            std::ofstream f(fname, std::ofstream::binary);
+            for(auto const& p : rev.second) {
+              int event = p.first;
+              auto entries = p.second;
+              for(auto const& q : entries) {
+                long entry = q;
+                f.write((char*)&event,sizeof(event));
+                f.write((char*)&entry,sizeof(entry));
+              }
+            }
+            f.close();
+          }
+        }
+        fMapOfFluxTreeEntries.clear();
+      };
       if(fTrees.find(run) == fTrees.end()) {
         std::string fname = Form(fLocTemplate.c_str(), run);
         std::cout << "opening file " << fname << std::endl; 
@@ -113,11 +133,31 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
           throw cet::exception("LogicError") << "Cannot find dk2nuTree in flux file "<<fname <<  std::endl;
         }
         t->SetBranchAddress("dk2nu", &dk2nu_entry);
+        clear_cache();
         for(long i = 0; i < t->GetEntries(); ++i) {
           t->GetEntry(i);
           fMapOfFluxTreeEntries[run][dk2nu_entry->potnum].push_back(i);
         }
         fTrees[run] = t;
+      }
+      if(fMapOfFluxTreeEntries.find(run) == fMapOfFluxTreeEntries.end()) {
+        clear_cache();
+        std::string fname = Form("%d.cache",run);
+        std::ifstream f(fname.c_str(),std::ifstream::binary);
+          if(f.good()) {
+            int event;
+            long entry;
+            while(true) {
+              f.read((char*)&event,sizeof(event));
+              if(!f.good()) break;
+              f.read((char*)&entry,sizeof(entry));
+              if(!f.good()) break;
+              fMapOfFluxTreeEntries[run][event].push_back(entry);
+            }
+          } else {
+            throw cet::exception("LogicError") << "Cannot find cache "<<fname <<  std::endl;
+          }
+          f.close();
       }
       const int event = f.fevtno;
       if(fMapOfFluxTreeEntries[run].find(event) == fMapOfFluxTreeEntries[run].end()) {
