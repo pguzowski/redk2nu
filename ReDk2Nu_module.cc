@@ -177,6 +177,11 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
           }
         }
         else {
+          // clean up memory leaks
+          TFile *f_before_closing = fCachedEntriesFile;
+          fCachedEntriesFile = TFile::Open(fCachedEntriesFile->GetName());
+          delete f_before_closing;
+
           TTree *tcache = (TTree*)fCachedEntriesFile->Get(Form("t_%d",run));
           TTree *tcache2 = (TTree*)fCachedEntriesFile->Get(Form("t_%d_inc",run));
           unsigned short potnum_low16;
