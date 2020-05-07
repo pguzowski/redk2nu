@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <cstdlib>
+#include <cstdio>
 
 #include <map>
 #include <vector>
@@ -71,6 +72,8 @@ private:
   
   std::string fTmploc;
 
+  TFile *fCachedEntriesFile;
+
 };
 
 
@@ -78,7 +81,7 @@ redk2nu::ReDk2Nu::ReDk2Nu(fhicl::ParameterSet const& p)
   : EDProducer{p}, fGenLabel(p.get<std::string>("truth_label")),
   fLocTemplate(p.get<std::string>("flux_location_template")),
   dk2nu_entry(new bsim::Dk2Nu),
-  fCurrFile(0), fTmploc("")
+  fCurrFile(0), fTmploc(""), fCachedEntriesFile(0)
   // ,
   // More initializers here.
 {
@@ -95,11 +98,22 @@ redk2nu::ReDk2Nu::ReDk2Nu(fhicl::ParameterSet const& p)
   if(tmpdir) {
     fTmploc = Form("%s/",tmpdir);
   }
+  const char* cachedEntriesName = "flux_cached_entries.root";
+  if(std::ifstream(cachedEntriesName,std::ifstream::binary).good()) {
+    // attempt to move it to tmpdir so it doesn't get copied back from a gridnode
+    const std::string newloc = fTmploc + cachedEntriesName;
+    if(!tmpdir || std::rename(cachedEntriesName, newloc.c_str()) < 0) {
+      fCachedEntriesFile = TFile::Open(cachedEntriesName);
+    } else {
+      fCachedEntriesFile = TFile::Open(newloc.c_str());
+    }
+  }
 }
 
 redk2nu::ReDk2Nu::~ReDk2Nu() {
   delete dk2nu_entry;
   delete fCurrFile;
+  if(fCachedEntriesFile) delete fCachedEntriesFile;
 }
 
 void redk2nu::ReDk2Nu::produce(art::Event& e)
@@ -156,9 +170,35 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
         std::cout << "opening file " << fname << std::endl; 
         clear_cache();
         TTree *t = load_tree(fname);
-        for(long i = 0; i < t->GetEntries(); ++i) {
-          t->GetEntry(i);
-          fMapOfFluxTreeEntries[run][dk2nu_entry->potnum].push_back(i);
+        if(!fCachedEntriesFile) {
+          for(long i = 0; i < t->GetEntries(); ++i) {
+            t->GetEntry(i);
+            fMapOfFluxTreeEntries[run][dk2nu_entry->potnum].push_back(i);
+          }
+        }
+        else {
+          TTree *tcache = (TTree*)fCachedEntriesFile->Get(Form("t_%d",run));
+          TTree *tcache2 = (TTree*)fCachedEntriesFile->Get(Form("t_%d_inc",run));
+          unsigned short potnum_low16;
+          int  potnum_upper_16 = 0;
+          Long64_t potnum_up16_incr_entry = 0;
+          tcache->SetBranchAddress("potnum_low16",&potnum_low16);
+          tcache2->SetBranchAddress("entry",&potnum_up16_incr_entry);
+          long curr_tcache2_entry = 0;
+          if(tcache2->GetEntries() > curr_tcache2_entry) {
+            tcache2->GetEntry(curr_tcache2_entry++);
+          }
+          for(long j = 0; j < tcache->GetEntries(); ++j) {
+            tcache->GetEntry(j);
+            if(potnum_up16_incr_entry == j) {
+              if(tcache2->GetEntries() > curr_tcache2_entry) {
+                tcache2->GetEntry(curr_tcache2_entry++);
+              }
+              potnum_upper_16++;
+            }
+            int potnum = (potnum_upper_16 << 16) + potnum_low16;
+            fMapOfFluxTreeEntries[run][potnum].push_back(j);
+          }
         }
         fTrees[run] = t;
       }
