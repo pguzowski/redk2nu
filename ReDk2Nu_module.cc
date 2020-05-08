@@ -156,7 +156,7 @@ void redk2nu::ReDk2Nu::produce(art::Event& e)
       
       auto load_tree = [&](const std::string& fn) -> TTree* {
         if(fCurrFile) delete fCurrFile;
-        fCurrFile = new TFile(fn.c_str());
+        fCurrFile = TFile::Open(fn.c_str());
         TTree *t = (TTree*)fCurrFile->Get("dk2nuTree");
         if(!t) {
           throw cet::exception("LogicError") << "Cannot find dk2nuTree in flux file "<<fn <<  std::endl;
